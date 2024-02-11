@@ -69,10 +69,11 @@ def updateTracker(img):
     lk_params = dict( winSize  = (32,32),
                   maxLevel = 8,
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 9, 0.02555))
+    print(p0)
     p1, st, err = cv2.calcOpticalFlowPyrLK(old_frame, frame_img, p0, None, **lk_params)
     old_frame = frame_img.copy()
     p0 = p1.copy()
-
+    
     return p1.T
 
 
