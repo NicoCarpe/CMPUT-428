@@ -39,10 +39,12 @@ def writeCorners(file_id, corners):
 
 
 def drawRegion(img, corners, color, thickness=1):
+    # reshape for compatibility
+    draw_corners = corners.T
     # draw the bounding box specified by the given corners
     for i in range(4):
-        p1 = (int(corners[0, i]), int(corners[1, i]))
-        p2 = (int(corners[0, (i + 1) % 4]), int(corners[1, (i + 1) % 4]))
+        p1 = (int(draw_corners[0, i]), int(draw_corners[1, i]))
+        p2 = (int(draw_corners[0, (i + 1) % 4]), int(draw_corners[1, (i + 1) % 4]))
         cv2.line(img, p1, p2, color, thickness)
 
 
@@ -53,7 +55,9 @@ def initTracker(img, corners):
     global old_frame
     global p0
     old_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    p0 = corners.T.astype(np.float32)
+
+    # reshape for compatibility with cv2.calcOpticalFlowPyrLK
+    p0 = corners.astype(np.float32).reshape(-1, 1, 2)
     pass
 
 
@@ -69,12 +73,12 @@ def updateTracker(img):
     lk_params = dict( winSize  = (32,32),
                   maxLevel = 8,
                   criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 9, 0.02555))
-    print(p0)
     p1, st, err = cv2.calcOpticalFlowPyrLK(old_frame, frame_img, p0, None, **lk_params)
     old_frame = frame_img.copy()
     p0 = p1.copy()
-    
-    return p1.T
+
+    # return back to our origional shape
+    return p1.reshape(-1, 2)
 
 
 if __name__ == '__main__':
