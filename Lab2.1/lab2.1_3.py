@@ -22,7 +22,7 @@ def select_points(img1_path, img2_path, num_points):
     ax[1].imshow(img2)
     ax[1].set_title('Second Image')
     
-    # allow user to select correspoinding points on each image
+    # allow user to select corresponding points on each image
     points = plt.ginput(num_points * 2) 
     plt.close()
 

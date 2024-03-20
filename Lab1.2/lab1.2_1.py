@@ -6,7 +6,7 @@ def ssd(image1, image2):
 
 def calculate_motion(roi, frame_next, x, y, w, h, max_iterations=50, tolerance=0.01):
     best_move = (0, 0)
-    for iteration in range(max_iterations):
+    for _ in range(max_iterations):
         local_min_ssd = float('inf')
         local_best_move = (0, 0)
         
