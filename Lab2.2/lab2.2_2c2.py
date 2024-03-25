@@ -3,70 +3,101 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import lk
+import os
 
-def select_points(img_path, num_points):
-    # read in images and convert to proper colors
-    img = cv2.imread(img_path)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  
-    img_shape = img.shape[:2]
+def load_frames(saved_frames_directory):
+    # Sort files to ensure correct order
+    filenames = sorted(os.listdir(saved_frames_directory))
+    frames = []
+    for filename in filenames:
+        frame_path = os.path.join(saved_frames_directory, filename)
+        if os.path.isfile(frame_path):
+            # Assuming you want to track in grayscale
+            frame = cv2.imread(frame_path)
+            frames.append(frame)
+    return frames
 
-    # display the two images side by side
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    ax[0].imshow(img)
+def select_points(frame, number_of_points = 7):
+    # display image 
+    plt.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-    # allow user to select corresponding points on each image
-    points = plt.ginput(num_points) 
+    # user clicks on points
+    points = plt.ginput(number_of_points)
     plt.close()
 
-    # return the corresponding points on each image
-    img_points = np.array(points[:num_points]).astype(np.float32)
-    
-    return img_points, img_shape
+    # convert list to NumPy array
+    points = np.array(points, dtype=np.float32)
+    return points
 
-def track_points(img_points, img_set):
-    img_point_set = []
+def track_points(frames):
+    tracked_points_list = []
 
-    for i, img in enumerate(img_set):
-        img = cv2.imread(img)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # Let the user select points on the first frame
+    tracked_points = select_points(frames[0])
+    tracked_points_list.append(tracked_points)
 
-        if i == 0:
-            lk.initTracker(img, img_points)
+    frame_shape = frames[0].shape
 
-        else:
-            img_points = lk.updateTracker(img)
+    lk.initTracker(frames[0], tracked_points)
 
-        img_point_set.append(img_points)
-    return img_point_set
+    for frame in frames[1:]:
+        
+        # update the tracker with the current frame
+        tracked_points = lk.updateTracker(frame)
+        tracked_points_list.append(tracked_points)
 
-def depth_estimation(points, f, baseline, img_width, img_height):
+         # draw the tracked corners on the frame
+        for x, y in tracked_points:
+            cv2.circle(frame, (int(x), int(y)), radius=5, color=(0, 255, 0), thickness=-1)
+        
+        # display frame
+        cv2.imshow("Frame", frame)
+        cv2.waitKey(0)
+        # exit loop if escape key is pressed
+        if cv2.waitKey(1) == 27:  # 27 is the ASCII code for the escape key
+            break
+
+    cv2.destroyAllWindows()
+
+    return tracked_points_list, frame_shape
+
+
+def depth_estimation(points, f, baseline):
     num_images = len(points)
     num_points = points[0].shape[0]
 
+    # initialize matrices for the least squares solution
     A = np.zeros((num_images * num_points, num_points))
-    b = np.zeros(num_images * num_points)
+    b = np.zeros(num_images * num_points) 
     
-    # fill A matrix and b vector based on disparity
-    for i, point in enumerate(points):
+    # fill A and b to compute disparities
+    for i in range(1, num_images):
         for j in range(num_points):
-            A[i * num_points + j, j] = point[j, 0] - img_width / 2
-            b[i * num_points + j] = f * i * baseline
+            # each point's change in position should reflect its disparity due to the camera's movement
+
+            # implies a direct relation between disparity and observed movement
+            A[(i-1) * num_points + j, j] = 1  
+
+            # b is the difference in x-coordinates between consecutive images
+            b[(i-1) * num_points + j] = points[i][j, 0] - points[i-1][j, 0]
     
-    # solve least squares problem
-    depths = np.linalg.lstsq(A, b, rcond=None)[0]
+    # solve the least squares problem for disparities
+    disparities = np.linalg.lstsq(A, b, rcond=None)[0]
+
+    # compute depths from disparities Depth = (f * baseline) / disparity
+    depths = (f * baseline) / disparities
+
     return depths
 
 
-def reconstruct_3d_points(img1_points, depths, f, img_width, img_height):
-    # img_width and img_height are the dimensions of the image used for calculating the coordinates
-    
+def reconstruct_3d_points(img1_points, depths, f, img_width, img_height):    
     # adjust points based on the principal point (assumed at image center)
-    adjusted_x = (img1_points[:, 0] - img_width / 2)
-    adjusted_y = (img1_points[:, 1] - img_height / 2)
+    cx = (img1_points[:, 0] - img_width / 2)
+    cy = (img1_points[:, 1] - img_height / 2)
     
     # calculate 3D coordinates
-    x = adjusted_x * depths / f
-    y = adjusted_y * depths / f
+    x = cx * depths / f
+    y = cy * depths / f
     z = depths
     
     # stack coordinates to create 3D points
@@ -95,33 +126,17 @@ def plot_3d_points(points_3d):
 
 def main():
     f = 515             # focal length of our camera in pixels
-    baseline = 0.05            # lateral movement in camera in meters
-    num_points = 7      # number of point correspondences 
-
-    img_set = ["pictures/2c/box_x0.0.jpg",
-               "pictures/2c/box_x0.5.jpg",
-               "pictures/2c/box_x1.0.jpg",
-               "pictures/2c/box_x1.5.jpg",
-               "pictures/2c/box_x2.0.jpg",
-               "pictures/2c/box_x2.5.jpg",
-               "pictures/2c/box_x3.0.jpg",
-               "pictures/2c/box_x3.5.jpg",
-               "pictures/2c/box_x4.0.jpg",
-               "pictures/2c/box_x4.5.jpg"
-    ]
-               
-
-               
-
-    # select points
-    img_points, img_shape = select_points(img_set[0], num_points)
+    baseline = 0.05     # lateral movement in camera in meters
     
-    img_points_set = track_points(img_points, img_set)
+    saved_frames_directory = ".\\pictures\\2c\\"
+    frames = load_frames(saved_frames_directory)
+    tracked_points_list, frame_shape = track_points(frames)
+
     # solve for the point depths using linear least squates
-    depths = depth_estimation(img_points_set, f, baseline, img_shape[0], img_shape[1])
+    depths = depth_estimation(tracked_points_list, f, baseline)
 
     # reconstruct 3D points from the first image's projections and estimated depths
-    points_3d = reconstruct_3d_points(img_points_set[0], depths, f, img_shape[0], img_shape[1])
+    points_3d = reconstruct_3d_points(tracked_points_list[0], depths, f, frame_shape[0], frame_shape[1])
 
     # plot 3D points
     plot_3d_points(points_3d)

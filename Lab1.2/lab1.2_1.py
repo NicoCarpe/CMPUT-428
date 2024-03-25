@@ -38,7 +38,7 @@ def calculate_motion(roi, frame_next, x, y, w, h, max_iterations=50, tolerance=0
 
 def main():
     # start video
-    cam = cv2.VideoCapture(1)
+    cam = cv2.VideoCapture(0)
 
     # wait for a frame to initialize trackers
     ret, frame = cam.read()

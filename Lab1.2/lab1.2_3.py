@@ -1,99 +1,104 @@
 import cv2
 import numpy as np
 
+def warp_image(image, p):   
+    # construct the affine warp matrix
+    warp_matrix = np.array(np.float32(
+        [[p[0], p[1], p[2]],
+         [p[3], p[4], p[5]]],
+        ))
+  
 
-def ssd(image1, image2):
-    return np.sum((image1.astype("float") - image2.astype("float")) ** 2)
-
-
-def build_gaussian_pyramid(image, levels, resize_factor):
-    # start with original image in array
-    pyramid = [image]
-    for _ in range(1, levels):
-        # find image dimensions
-        rows, cols, _ = image.shape
-
-        # downsample according to the resize factor
-        image = cv2.pyrDown(image, dstsize=(cols // resize_factor, rows // resize_factor))
-
-        # append downsampled image to array
-        pyramid.append(image)
-        
-    return pyramid
+    # warp the given image using the provided affine parameters
+    return cv2.warpAffine(image, warp_matrix, (image.shape[1], image.shape[0]))
 
 
-def calculate_motion(roi, frame_next, x, y, w, h, max_iterations=50, tolerance=0.01):
-    best_move = (0, 0)
+def compute_gradients(image):
+    # compute gradients using forward differences
+   
+    grad_x = np.zeros(image.shape)
+    grad_y = np.zeros(image.shape)
+
+    # forward differences
+    grad_x[:, :-1] = image[:, 1:] - image[:, :-1]
+    grad_y[:-1, :] = image[1:, :] - image[:-1, :]
+
+    return grad_x, grad_y
+
+
+def calculate_motion(template, frame, p, h, w, threshold=0.01, max_iterations=10):
+    # apply the Lucas-Kanade method with an affine warp to find the warp parameters
     for _ in range(max_iterations):
-        local_min_ssd = float('inf')
-        local_best_move = (0, 0)
-        
-        for dx in range(-5, 5):  
-            for dy in range(-5, 5):  
-                new_x, new_y = x + dx, y + dy
+        # warp the entire frame with the current estimate of p
+        warped_frame = warp_image(frame, p)
 
-                # check if the new coordinates are within the frame
-                if (0 <= new_x <= frame_next.shape[1] - w) and (0 <= new_y <= frame_next.shape[0] - h):
-                    next_roi = frame_next[new_y:new_y+h, new_x:new_x+w]
+        # compute gradients of the warped frame (now doing it after warping)
+        grad_x, grad_y = compute_gradients(warped_frame)
 
-                    # calculate SSD (make sure only if candidate ROI is valid
-                    if next_roi.shape == roi.shape:
-                        current_ssd = ssd(roi, next_roi)
-                        
-                        if current_ssd < local_min_ssd:
-                            local_min_ssd = current_ssd
-                            local_best_move = (dx, dy)
+        # extract the ROI from the warped frame and its gradients
+        x = int(p[2])
+        y = int(p[5])
+        warped_roi = warped_frame[y:y+h, x:x+w]
+        grad_x_roi = grad_x[y:y+h, x:x+w]
+        grad_y_roi = grad_y[y:y+h, x:x+w]
 
-        # Update the position only if a better move is found
-        if np.linalg.norm(local_best_move) >= tolerance:
-            best_move = local_best_move
-            x, y = x + best_move[0], y + best_move[1]
-        else:
+        # compute the error image
+        error_image = np.float32(template) - np.float32(warped_roi)
+
+        # initialize the Hessian matrix and the updates for the affine parameters
+        H = np.zeros((6, 6))
+        sd_update = np.zeros(6)
+
+        # compute steepest descent images and update the Hessian and parameter updates
+        for i in range(h):
+            for j in range(w):
+                # calculate the Jacobian for an affine warp at the current pixel
+                J = np.array([[j, 0, i, 0, 1, 0],
+                              [0, j, 0, i, 0, 1]])
+
+                # steepest descent image for the current pixel
+                sd_img = np.array([[grad_x_roi[i, j], grad_y_roi[i, j]]]) @ J
+
+                # update Hessian and steepest descent parameter update
+                H += sd_img.T @ sd_img
+                sd_update += sd_img.flatten() * error_image[i, j]
+
+        # compute the parameter update step for the whole image
+        p_step = np.linalg.lstsq(H, sd_update, rcond=None)[0]
+
+        # check and update the warp parameters p using p_step
+        p += p_step
+
+        # check for convergence
+        if np.linalg.norm(p_step) < threshold:
             break
 
-    return best_move
+    return p
 
 
-def calculate_motion_pyramid(roi_pyramid, frame_pyramid, x, y, w, h, resize_factor):
-    levels = len(roi_pyramid)
-    move = (0, 0)  # Initialize motion
-    
-    for level in range(levels-1, -1, -1):
-        scale = resize_factor ** level
-        scaled_x, scaled_y = int(x / scale + move[0] * 2 ** (level - levels + 1)), int(y / scale + move[1] * 2 ** (level - levels + 1))
-        scaled_w, scaled_h = int(w / scale), int(h / scale)
-        
-        # Adjust starting position based on move from previous level
-        move = calculate_motion(
-            roi_pyramid[level], frame_pyramid[level], 
-            scaled_x, scaled_y, scaled_w, scaled_h
-        )
-        
-        # Scale move up for the next (finer) level
-        if level > 0:
-            move = (move[0] * 2, move[1] * 2)
-    
-    # Apply final move to original coordinates
-    return move
 
 def main():
     cam = cv2.VideoCapture(0)
 
     ret, frame = cam.read()
     if not ret:
-        print("Failed to capture video")
+        print("Failed to grab frame")
+        cam.release()
+        cv2.destroyAllWindows()
         return
-    
-    out = cv2.VideoWriter('output.mp4', -1, 20.0, (frame.shape[1], frame.shape[0]))
-    
+
+    # initialize video
+    out = cv2.VideoWriter('lab1.2_3.mp4', -1, 30.0, (frame.shape[1], frame.shape[0]))
+
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    x, y, w, h = cv2.selectROI("ROI Selector", frame, fromCenter=False)
-    cv2.destroyWindow("ROI Selector")
-    
-    roi = frame[y:y+h, x:x+w]
-    
-    levels = 3  # Number of levels in the Gaussian pyramid
-    resize_factor = 2  # Resize factor between levels
+    x, y, w, h = cv2.selectROI("ROI", frame, fromCenter=False)
+    cv2.destroyAllWindows()
+
+    # define the corners of the original ROI used as the template
+    template = frame[y:y+h, x:x+w]
+
+    # initialize affine parameters 
+    p = np.float32(np.array([1, 0, x, 0, 1, y]))
 
     while True:
         ret, frame = cam.read()
@@ -101,15 +106,12 @@ def main():
             break
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        roi_pyramid = build_gaussian_pyramid(roi, levels, resize_factor)
-        frame_pyramid = build_gaussian_pyramid(frame, levels, resize_factor)
-        
-        best_move = calculate_motion_pyramid(roi_pyramid, frame_pyramid, x, y, w, h, resize_factor=resize_factor)
-        
-        x += best_move[0]
-        y += best_move[1]
-        roi = frame[y:y+h, x:x+w]
+
+        p = calculate_motion(template, frame, p, h, w)
+
+        # extract our new translations from our parameters (make sure they are ints)
+        x = int(p[2])
+        y = int(p[5])
 
         # display the current position of the tracker
         cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
@@ -117,6 +119,7 @@ def main():
 
         # write the frame to the video file
         out.write(frame)
+
 
         k = cv2.waitKey(1)
         if k%256 == 27:

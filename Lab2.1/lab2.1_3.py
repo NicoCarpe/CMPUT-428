@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # flags for task selection
-L1_NORM  = True            # task (b) flag
-NORMALIZATION = True       # task (c) flag
+L1_NORM  = False            # task (b) flag
+NORMALIZATION = False       # task (c) flag
 
 def select_points(img1_path, img2_path, num_points):
     # read in images and convert to proper colors

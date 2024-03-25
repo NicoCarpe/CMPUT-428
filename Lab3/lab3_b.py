@@ -5,7 +5,7 @@ import lk
 from mpl_toolkits.mplot3d import Axes3D
 
 
-def select_corners(frame, number_of_points = 17):
+def select_corners(frame, number_of_points = 10):
     # display image 
     plt.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
@@ -51,7 +51,6 @@ def track_corners():
         
         # display frame
         cv2.imshow("Frame", frame)
-        
         # exit loop if escape key is pressed
         if cv2.waitKey(1) == 27:  # 27 is the ASCII code for the escape key
             break

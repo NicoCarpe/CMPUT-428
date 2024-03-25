@@ -20,7 +20,7 @@ def capture_images(sequence_length, img_folder):
 
 
 def temporal_derivatives(images, thresh_folder):
-    threshold = 150
+    threshold = 250
     for i in range(1, len(images)):
         # we need to convert our images from colour to grayscale (takes in an image and color space conversion code)
         prev_frame = cv2.cvtColor(images[i-1], cv2.COLOR_BGR2GRAY)

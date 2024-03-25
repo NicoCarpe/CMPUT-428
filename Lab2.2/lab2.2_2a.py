@@ -40,8 +40,8 @@ def calculate_focal_length(size_real, depth, size_image):
     return focal_length
 
 def main():
-    img1_path = "pictures/ruler_1.jpg"
-    img2_path = "pictures/ruler_2.jpg"
+    img1_path = "pictures/2a/ruler_1_d13.jpg"
+    img2_path = "pictures/2a/ruler_2_d10.5.jpg"
 
     # distances in meters
     size_real = 0.1    # choose points 10 cm apart on each image

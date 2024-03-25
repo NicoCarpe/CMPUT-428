@@ -33,7 +33,7 @@ def project_points(points, camera_position, f):
     # return in cartesian coordinates
     return projected_points[:, :-1] / (projected_points[:, -1:])
 
-
+"""
 def depth_estimation(projected_points, f, baseline, img_width, img_height):
     num_images = len(projected_points)
     num_points = projected_points[0].shape[0]
@@ -50,7 +50,33 @@ def depth_estimation(projected_points, f, baseline, img_width, img_height):
     # solve least squares problem
     depths = np.linalg.lstsq(A, b, rcond=None)[0]
     return depths
+"""
+def depth_estimation(points, f, baseline):
+    num_images = len(points)
+    num_points = points[0].shape[0]
 
+    # initialize matrices for the least squares solution
+    A = np.zeros((num_images * num_points, num_points))
+    b = np.zeros(num_images * num_points) 
+    
+    # fill A and b to compute disparities
+    for i in range(1, num_images):
+        for j in range(num_points):
+            # each point's change in position should reflect its disparity due to the camera's movement
+
+            # implies a direct relation between disparity and observed movement
+            A[(i-1) * num_points + j, j] = 1  
+
+            # b is the difference in x-coordinates between consecutive images
+            b[(i-1) * num_points + j] = points[i][j, 0] - points[i-1][j, 0]
+    
+    # Solve the least squares problem for disparities
+    disparities = np.linalg.lstsq(A, b, rcond=None)[0]
+
+    # Compute depths from disparities Depth = (f * baseline) / disparity
+    depths = (f * baseline) / disparities
+
+    return depths
 
 def reconstruct_3d_points(img1_points, depths, f, img_width, img_height):
     # img_width and img_height are the dimensions of the image used for calculating the coordinates
@@ -90,8 +116,8 @@ def plot_3d_points(points_3d):
 
 def main():  
     # set focal length 
-    f = 40
-    baseline = 10
+    f = 1500
+    baseline = 100
     # create a 3D box  
     box_3d = generate_box_3d()  
     img_width, img_height = 640, 480 
@@ -104,7 +130,7 @@ def main():
     projected_points_set = [project_points(box_3d, pos, f) for pos in camera_positions]
 
     # solve for the point depths using linear least squates
-    depths = depth_estimation(projected_points_set, f, baseline, img_width, img_height)
+    depths = depth_estimation(projected_points_set, f, baseline)#, img_width, img_height)
 
     # reconstruct 3D points from the first image's projections and estimated depths
     points_3d = reconstruct_3d_points(projected_points_set[0], depths, f, img_width, img_height)

@@ -32,6 +32,7 @@ def affine_SfM(W, n_frames):
     S = S[:3, :3]
     V_t = V_t[:3, :]
 
+    # use square root to balance the scaling made by the singular value across both the motion and shape
     # camera matrices (motion)
     M = U @ np.sqrt(S)
 
@@ -76,7 +77,7 @@ def main():
     try:
         n_frames = data["NrFrames"].item()
         imgs = data["mexVims"]
-        #plot_origin_data(W, n_frames, imgs)
+        plot_origin_data(W, n_frames, imgs)
 
     except:
         n_frames = W.shape[0] // 2

@@ -116,9 +116,9 @@ def projective_reconstruction(W, n_frames, max_iterations=100, convergence_thres
     return M, struct_3D
 
 def main():
-    #dataset = "HouseTallBasler64.mat"
+    dataset = "HouseTallBasler64.mat"
     #dataset = "affrec1.mat"
-    dataset = "affrec3.mat"
+    #dataset = "affrec3.mat"
 
     data = loadmat(dataset)
     
